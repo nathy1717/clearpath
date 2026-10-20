@@ -6,20 +6,20 @@ import {
   STORAGE_KEY,
 } from "@/lib/domain";
 
-export function loadApplication(id: string): ClearpathApplication | null {
+export function loadDemoApplication(): ClearpathApplication | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(STORAGE_KEY);
   const stored = raw ? JSON.parse(raw) as ClearpathApplication[] : [];
-  const existing = stored.find((application) => application.id === id);
+  const existing = stored.find((application) => application.id === demoApplication.id);
   if (existing) return existing;
-  if (id === demoApplication.id) {
-    saveApplication(demoApplication);
-    return demoApplication;
-  }
-  return null;
+  saveDemoApplication(demoApplication);
+  return demoApplication;
 }
 
-export function saveApplication(application: ClearpathApplication) {
+export function saveDemoApplication(application: ClearpathApplication) {
+  if (application.id !== demoApplication.id || !application.isDemo) {
+    throw new Error("Only the fictional demo can use browser storage.");
+  }
   const raw = window.localStorage.getItem(STORAGE_KEY);
   const stored = raw ? JSON.parse(raw) as ClearpathApplication[] : [];
   const applications = stored.filter((item) => item.id !== application.id);
@@ -27,15 +27,8 @@ export function saveApplication(application: ClearpathApplication) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(applications));
 }
 
-export function deleteApplication(id: string) {
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  const stored = raw ? JSON.parse(raw) as ClearpathApplication[] : [];
-  const remaining = stored.filter((application) => application.id !== id);
-  if (remaining.length === 0) {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } else {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
-  }
+export function deleteDemoApplication() {
+  window.localStorage.removeItem(STORAGE_KEY);
 }
 
 export function makeId() {

@@ -9,6 +9,35 @@ import {
   Requirement,
   taskProgress,
 } from "../lib/domain";
+import { isClearpathApplication } from "../lib/application-validation";
+import { exactCitationLine } from "../lib/ai/citations";
+
+test("accepts a complete workspace payload for persistence", () => {
+  assert.equal(
+    isClearpathApplication({ ...demoApplication, isDemo: false }),
+    true,
+  );
+});
+
+test("rejects malformed or incorrectly typed workspace payloads", () => {
+  assert.equal(
+    isClearpathApplication({ ...demoApplication, isDemo: false, tasks: "not a list" }),
+    false,
+  );
+  assert.equal(
+    isClearpathApplication({ ...demoApplication, isDemo: false, name: "x" }),
+    false,
+  );
+});
+
+test("only accepts exact source quotations and returns their line number", () => {
+  const source = "Eligibility\nApplicants must submit a transcript.\nDeadline is Friday.";
+  assert.equal(
+    exactCitationLine(source, "Applicants must submit a transcript."),
+    2,
+  );
+  assert.equal(exactCitationLine(source, "Applicants must submit a resume."), null);
+});
 
 test("keeps unresolved mandatory requirements as insufficient information", () => {
   const requirements: Requirement[] = [

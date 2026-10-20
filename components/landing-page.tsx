@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import ApplicationList from "@/components/application-list";
 import {
   ArrowDown,
   ArrowRight,
@@ -46,9 +48,21 @@ export default function LandingPage() {
           <a href="#how-it-works">How it works</a>
           <a href="#why-clearpath">Why ClearPath</a>
         </nav>
-        <Link className="header-cta" href="/applications/new">
-          Get started <ArrowUpRight size={15} />
-        </Link>
+        <SignedOut>
+          <SignInButton mode="modal">
+            <span className="header-cta">Get started <ArrowUpRight size={15} /></span>
+          </SignInButton>
+        </SignedOut>
+        <SignedIn>
+          <Link className="header-cta" href="/applications/new">
+            Open your workspace <ArrowUpRight size={15} />
+          </Link>
+        </SignedIn>
+        <SignedIn>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        </SignedIn>
       </header>
 
       <section className="hero-section">
@@ -70,7 +84,7 @@ export default function LandingPage() {
           <Link className="demo-link" href="/applications/demo/assessment"><span>New here?</span> Try the guided demo <ArrowRight size={14} /></Link>
           <div className="hero-proof">
             <span className="proof-icon"><LockKeyhole size={15} /></span>
-            <span>Your documents stay in this browser in the demo.</span>
+            <span>The guided demo uses fictional details only.</span>
           </div>
         </div>
 
@@ -120,6 +134,10 @@ export default function LandingPage() {
           <div className="floating-note"><CheckCircle2 size={16} /><span><b>Keep the source close</b><small>Every check has a reason.</small></span></div>
         </div>
       </section>
+
+      <SignedIn>
+        <ApplicationList />
+      </SignedIn>
 
       <section className="trust-strip" id="why-clearpath">
         <span>Less second-guessing.</span><i />

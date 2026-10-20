@@ -8,6 +8,7 @@ export type EvidenceStatus =
   | "not_applicable";
 export type TaskStatus = "todo" | "in_progress" | "completed" | "blocked";
 export type AuditSeverity = "blocking" | "warning" | "information";
+export type SuggestedEvidenceStatus = "possible_match" | "not_found" | "needs_review";
 
 export interface Requirement {
   id: string;
@@ -18,6 +19,9 @@ export interface Requirement {
   action: string;
   sourceQuote: string;
   sourceLocation: string;
+  suggestedStatus?: SuggestedEvidenceStatus;
+  evidenceQuote?: string;
+  evidenceSourceName?: string;
 }
 
 export interface ApplicationTask {

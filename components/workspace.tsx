@@ -19,9 +19,11 @@ import {
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import DocumentManager from "@/components/document-manager";
 import {
   ApplicationTask,
   AuditFinding,
@@ -32,7 +34,16 @@ import {
   deriveEligibility,
   taskProgress,
 } from "@/lib/domain";
-import { deleteApplication, loadApplication, saveApplication } from "@/lib/storage";
+import {
+  getApplication,
+  removeApplication,
+  updateApplication,
+} from "@/lib/client/applications";
+import {
+  deleteDemoApplication,
+  loadDemoApplication,
+  saveDemoApplication,
+} from "@/lib/storage";
 
 type WorkspaceView = "assessment" | "tasks" | "audit";
 type EvidenceFilter = "all" | "missing" | "review" | "matched";
@@ -86,34 +97,55 @@ export default function Workspace({
   const [runningAudit, setRunningAudit] = useState(false);
 
   useEffect(() => {
-    try {
-      const result = loadApplication(id);
-      if (!result) {
-        setLoadError("This workspace could not be found in this browser.");
-        return;
+    let active = true;
+    async function load() {
+      try {
+        const result = id === "demo"
+          ? loadDemoApplication()
+          : (await getApplication(id)).application;
+        if (active && !result) {
+          setLoadError("This workspace could not be found in your account.");
+          return;
+        }
+        if (active) setApplication(result);
+      } catch (error) {
+        if (active) {
+          setLoadError(error instanceof Error
+            ? error.message
+            : "This workspace could not be loaded. Please try again.");
+        }
       }
-      setApplication(result);
-    } catch {
-      setLoadError("This browser could not read the saved workspace. The saved data may be unavailable or corrupted.");
     }
+    void load();
+    return () => { active = false; };
   }, [id]);
 
-  function persist(next: ClearpathApplication) {
+  async function persist(next: ClearpathApplication) {
+    const previous = application;
     setApplication(next);
     setSaved(false);
     try {
-      saveApplication(next);
+      if (next.isDemo) {
+        saveDemoApplication(next);
+      } else {
+        const result = await updateApplication(next);
+        setApplication(result.application);
+      }
       setSaved(true);
       setStorageError("");
-    } catch {
-      setStorageError("Changes could not be saved. Your edits remain on screen but may be lost if you leave. Check browser storage and retry.");
+    } catch (error) {
+      setApplication(previous);
+      setSaved(true);
+      setStorageError(error instanceof Error
+        ? `Changes could not be saved: ${error.message}`
+        : "Changes could not be saved. Please retry.");
     }
   }
 
   function updateRequirement(requirementId: string, status: ClearpathApplication["requirements"][number]["status"]) {
     if (!application) return;
     let explanation =
-      "Status updated by you. This change is saved locally and has not been independently verified.";
+      "Status updated by you. This change has not been independently verified.";
     if (status === "not_applicable") {
       const reason = window.prompt("Why does this requirement not apply? Add a reason that you can verify with the opportunity provider.");
       if (!reason?.trim()) return;
@@ -144,17 +176,23 @@ export default function Workspace({
     });
   }
 
-  function runAudit() {
+  async function runAudit() {
     if (!application) return;
     setRunningAudit(true);
     const audit = buildAudit(application);
     const updated = { ...application, audits: [...application.audits, audit] };
     try {
-      saveApplication(updated);
+      if (updated.isDemo) {
+        saveDemoApplication(updated);
+      } else {
+        await updateApplication(updated);
+      }
       setApplication(updated);
       setStorageError("");
-    } catch {
-      setStorageError("The audit could not be saved. Check browser storage and try again.");
+    } catch (error) {
+      setStorageError(error instanceof Error
+        ? `The audit could not be saved: ${error.message}`
+        : "The audit could not be saved. Please try again.");
     } finally {
       setRunningAudit(false);
     }
@@ -192,14 +230,20 @@ export default function Workspace({
 
   const activeIndex = views.findIndex((item) => item.id === view);
 
-  function removeWorkspace() {
+  async function removeWorkspace() {
     if (!application) return;
-    if (!window.confirm(`Delete “${application.name}” from this browser? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete “${application.name}” from your account? This cannot be undone.`)) return;
     try {
-      deleteApplication(application.id);
+      if (application.isDemo) {
+        deleteDemoApplication();
+      } else {
+        await removeApplication(application.id);
+      }
       router.push("/");
-    } catch {
-      setStorageError("This workspace could not be deleted from browser storage.");
+    } catch (error) {
+      setStorageError(error instanceof Error
+        ? `This workspace could not be deleted: ${error.message}`
+        : "This workspace could not be deleted. Please try again.");
     }
   }
   return (
@@ -218,7 +262,7 @@ export default function Workspace({
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-progress"><div className="sidebar-progress-head"><span>Task progress</span><b>{progress.percent}%</b></div><div className="progress-track"><span style={{ width: `${progress.percent}%` }} /></div><small>{progress.completed} of {progress.total} tasks completed</small></div>
-          <div className="sidebar-private"><LockKeyhole size={14} /><span>Saved only in this browser</span></div>
+          <div className="sidebar-private"><LockKeyhole size={14} /><span>{application.isDemo ? "Fictional demo · saved locally" : "Private to your account"}</span></div>
           <Link href="/" className="sidebar-home"><ArrowLeft size={14} /> Exit workspace</Link>
         </div>
       </aside>
@@ -227,7 +271,7 @@ export default function Workspace({
         <header className="workspace-topbar">
           <div className="mobile-brand"><Link href="/" className="wordmark"><span className="brand-mark"><span /></span><span>clearpath</span></Link></div>
           <div className="topbar-breadcrumb"><span>My applications</span><span>/</span><b>{application.name}</b></div>
-          <div className={`save-status ${saved ? "saved" : ""}`}><span />{saved ? "Saved on this device" : "Saving…"}</div>
+          <div className={`save-status ${saved ? "saved" : ""}`}><span />{saved ? (application?.isDemo ? "Demo saved locally" : "Saved to your account") : "Saving…"}</div>
         </header>
         <div className="mobile-workflow">
           {views.map(({ id: itemId, label }, index) => <Link key={itemId} className={view === itemId ? "current" : ""} href={`/applications/${id}/${itemId}`}><span>{index + 1}</span>{label}</Link>)}
@@ -243,7 +287,7 @@ export default function Workspace({
               </div>
               <div className="summary-card">
                 <div className="summary-icon"><FileCheck2 size={20} /></div>
-                <div className="summary-main"><div className="summary-heading"><h2>{eligibility === "potential_issue" ? "There are items to address" : eligibility === "likely_meets_stated_criteria" ? "The information looks encouraging" : "A few details need your attention"}</h2><span className="preliminary-tag">PRELIMINARY REVIEW</span></div><p>This is a check against the details available here—not an official decision. A file name alone does not confirm its contents or validity.</p></div>
+                <div className="summary-main"><div className="summary-heading"><h2>{eligibility === "potential_issue" ? "There are items to address" : eligibility === "likely_meets_stated_criteria" ? "The information looks encouraging" : "A few details need your attention"}</h2><span className="preliminary-tag">PRELIMINARY REVIEW</span></div><p>This is a check against the details available here—not an official decision. AI suggestions and extracted text do not independently verify your documents.</p></div>
                 <div className="summary-stats"><div><b>{counts.matched}</b><span>noted</span></div><div><b>{counts.review}</b><span>to check</span></div><div><b>{counts.missing}</b><span>missing</span></div></div>
               </div>
               <div className="applicant-context"><div className="context-symbol"><Info size={15} /></div><div><span>YOUR NOTES · {application.studentContext ? "USER-PROVIDED" : "NONE ADDED"}</span><p>{application.studentContext || "No applicant context has been added. Statuses marked for review remain unresolved."}</p></div></div>
@@ -261,11 +305,23 @@ export default function Workspace({
                       <div className="requirement-title-row"><h3>{requirement.text}</h3><span className={`status-badge ${requirement.status}`}><span />{evidenceLabels[requirement.status]}</span></div>
                       <div className="requirement-meta"><span className={`kind-label ${requirement.kind}`}>{requirement.kind === "mandatory" ? "Required" : requirement.kind === "preferred" ? "Preferred" : "Needs review"}</span><span className="meta-divider" /><span>{requirement.explanation}</span></div>
                       <blockquote><span className="quote-mark">“</span><span>{requirement.sourceQuote}</span><cite><FileText size={12} /> {requirement.sourceLocation}</cite></blockquote>
+                      {requirement.suggestedStatus && <div className="ai-suggestion"><Sparkles size={13} /><span>AI suggestion: {requirement.suggestedStatus === "possible_match" ? "possible evidence match" : requirement.suggestedStatus === "not_found" ? "no matching evidence found" : "evidence needs review"}. This is not verified.</span></div>}
+                      {requirement.evidenceQuote && <blockquote className="evidence-quote"><span className="quote-mark">“</span><span>{requirement.evidenceQuote}</span><cite><FileText size={12} /> Possible evidence · {requirement.evidenceSourceName}</cite></blockquote>}
                       <div className="requirement-footer"><span><b>Next step</b> {requirement.action}</span><label className="status-edit">Update status<select aria-label={`Update status for ${requirement.text}`} value={requirement.status} onChange={(event) => updateRequirement(requirement.id, event.target.value as typeof requirement.status)}><option value="matched">Evidence noted</option><option value="missing">Missing</option><option value="needs_verification">Needs a check</option><option value="conflict">Conflict</option><option value="not_applicable">Not applicable</option></select></label></div>
                     </div>
                   </article>
                 ))}
               </div>
+              {application.isDemo
+                ? <div className="demo-documents-note"><Info size={15} /><span>The fictional guided demo does not upload documents or send its content to AI.</span></div>
+                : <DocumentManager
+                    applicationId={application.id}
+                    onAnalyzed={(updated) => {
+                      setApplication(updated);
+                      setSaved(true);
+                      setStorageError("");
+                    }}
+                  />}
               <div className="bottom-callout"><div className="callout-mark"><ShieldCheck size={18} /></div><div><b>Keep the evidence in view</b><p>Confirm each item with the original opportunity provider. This workspace cannot verify eligibility.</p></div><Link href={`/applications/${id}/tasks`} className="button button-primary">Make a plan <ArrowRight size={15} /></Link></div>
             </section>
           )}
@@ -300,7 +356,7 @@ export default function Workspace({
             <AuditView application={application} audit={latestAudit} stale={auditIsStale} running={runningAudit} onRun={runAudit} />
           )}
         </div>
-        <footer className="workspace-footer"><span><LockKeyhole size={13} /> Stored in this browser only</span><span>Preparation support · Not an official eligibility decision</span><button type="button" onClick={removeWorkspace}><Trash2 size={12} /> Delete workspace</button></footer>
+        <footer className="workspace-footer"><span><LockKeyhole size={13} /> {application.isDemo ? "Fictional demo stored in this browser" : "Private workspace stored in your account"}</span><span>Preparation support · Not an official eligibility decision</span><button type="button" onClick={removeWorkspace}><Trash2 size={12} /> Delete workspace</button></footer>
       </main>
     </div>
   );
