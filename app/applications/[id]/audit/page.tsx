@@ -1,9 +1,10 @@
 import Workspace from "@/components/workspace";
 
-export default function AuditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function AuditPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   return <Workspace id={params.id} view="audit" />;
 }
